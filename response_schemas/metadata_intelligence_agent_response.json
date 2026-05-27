@@ -1,0 +1,42 @@
+{
+  "agent_name": "Metadata Intelligence Agent",
+  "agent_id": "69ec5a88f00d79a836e9f8d6",
+  "description": "Performs deep metadata extraction including EXIF data, AI generation markers, software editing traces, hidden tags, and compression analysis. Scores on 0-100 scale with detailed reasoning.",
+  "agent_type": "json",
+  "accessor": "result",
+  "auto_generated": true,
+  "response_schema": {
+    "metadata_score": "number|null",
+    "metadata_flag": "string (ai_generated_confirmed|suspicious_metadata_absent|editing_detected|valid|inconclusive)",
+    "override_applied": "boolean",
+    "findings": "string",
+    "metadata_details": {
+      "exif_present": "boolean",
+      "device_info": "string",
+      "encoding_info": "string",
+      "ai_markers": "string",
+      "software_traces": "string",
+      "gps_data": "string",
+      "timestamp_analysis": "string"
+    },
+    "confidence": "string",
+    "reasoning": "string"
+  },
+  "example_response": {
+    "metadata_score": 90,
+    "metadata_flag": "ai_generated_confirmed",
+    "override_applied": true,
+    "findings": "DALL-E generation signature detected in XMP metadata, no camera EXIF present, creation software tagged as OpenAI DALL-E 3",
+    "metadata_details": {
+      "exif_present": false,
+      "device_info": "none found",
+      "encoding_info": "PNG encoding, no JPEG quantization tables",
+      "ai_markers": "DALL-E 3 signature in XMP:CreatorTool",
+      "software_traces": "OpenAI DALL-E 3",
+      "gps_data": "not present",
+      "timestamp_analysis": "Creation timestamp matches DALL-E API response pattern"
+    },
+    "confidence": "high",
+    "reasoning": "Score of 90 with ai_generated_confirmed flag due to unmistakable DALL-E 3 signatures in XMP metadata and absence of any camera EXIF data"
+  }
+}

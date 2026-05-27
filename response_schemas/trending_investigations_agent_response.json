@@ -1,0 +1,36 @@
+{
+  "agent_name": "Trending Investigations Agent",
+  "agent_id": "69ec5aaff00d79a836e9f8e4",
+  "description": "Analyzes trending patterns across uploaded media with context and snippet descriptions for trending items.",
+  "agent_type": "json",
+  "accessor": "result",
+  "auto_generated": true,
+  "response_schema": {
+    "trending_items": [
+      {
+        "title": "string",
+        "snippet": "string",
+        "category": "string",
+        "relevance_score": "number",
+        "context": "string"
+      }
+    ],
+    "trend_summary": "string",
+    "total_items": "number",
+    "analysis_period": "string"
+  },
+  "example_response": {
+    "trending_items": [
+      {
+        "title": "AI-Generated Political Deepfakes Surge",
+        "snippet": "A 40% increase in AI-generated political content has been detected across social media platforms in the past week.",
+        "category": "Political Deepfakes",
+        "relevance_score": 95,
+        "context": "Election season driving increased production of political deepfake content"
+      }
+    ],
+    "trend_summary": "Political deepfake content surging ahead of upcoming elections",
+    "total_items": 1,
+    "analysis_period": "Last 7 days"
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "nodes": [
+    {"id": "input_node", "type": "Input", "label": "Media Upload", "nodeCategory": "input"},
+    {"id": "manager_agent", "type": "Agent", "label": "Forensic Analysis Manager", "nodeCategory": "agent", "agent_id": "69ec5aafab1cfba2fa6404a8"},
+    {"id": "spatial_agent", "type": "Agent", "label": "Spatial Analysis", "nodeCategory": "agent", "agent_id": "69ec5a87c4b36f640acfeaf6"},
+    {"id": "temporal_agent", "type": "Agent", "label": "Temporal Analysis", "nodeCategory": "agent", "agent_id": "69ec5a87760c686665879a2f"},
+    {"id": "frequency_agent", "type": "Agent", "label": "Frequency Analysis", "nodeCategory": "agent", "agent_id": "69ec5a88760c686665879a31"},
+    {"id": "metadata_agent", "type": "Agent", "label": "Metadata Intelligence", "nodeCategory": "agent", "agent_id": "69ec5a88f00d79a836e9f8d6"},
+    {"id": "source_agent", "type": "Agent", "label": "Source Verification", "nodeCategory": "agent", "agent_id": "69ec5a88c4b36f640acfeaf8"},
+    {"id": "trending_agent", "type": "Agent", "label": "Trending Investigations", "nodeCategory": "agent", "agent_id": "69ec5aaff00d79a836e9f8e4"},
+    {"id": "text_analysis_agent", "type": "Agent", "label": "Text Analysis", "nodeCategory": "agent", "agent_id": "69ec6df22c9962aa0794fb36"},
+    {"id": "output_node", "type": "Output", "label": "Analysis Report", "nodeCategory": "end"}
+  ],
+  "edges": [
+    {"source": "input_node", "target": "manager_agent"},
+    {"source": "manager_agent", "target": "spatial_agent"},
+    {"source": "manager_agent", "target": "temporal_agent"},
+    {"source": "manager_agent", "target": "frequency_agent"},
+    {"source": "manager_agent", "target": "metadata_agent"},
+    {"source": "manager_agent", "target": "source_agent"},
+    {"source": "spatial_agent", "target": "output_node"},
+    {"source": "temporal_agent", "target": "output_node"},
+    {"source": "frequency_agent", "target": "output_node"},
+    {"source": "metadata_agent", "target": "output_node"},
+    {"source": "source_agent", "target": "output_node"},
+    {"source": "input_node", "target": "trending_agent"},
+    {"source": "trending_agent", "target": "output_node"},
+    {"source": "input_node", "target": "text_analysis_agent"},
+    {"source": "text_analysis_agent", "target": "output_node"}
+  ]
+}
