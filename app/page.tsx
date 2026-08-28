@@ -290,7 +290,11 @@ function AppContent() {
         if (uploadResult.error === 'Upload was cancelled by user') {
           return;
         }
-        setAnalysisError('Failed to upload file after multiple attempts. Please check your connection and try again.');
+        const serverMessage = uploadResult.message || uploadResult.error || '';
+        const errorMsg = serverMessage && serverMessage !== 'Upload failed'
+          ? serverMessage
+          : 'Failed to upload file. Please check your connection and try again.';
+        setAnalysisError(errorMsg);
         setAnalysisLoading(false);
         setUploadPhase('idle');
         setUploadProgress(0);

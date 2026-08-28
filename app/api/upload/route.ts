@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+export const maxDuration = 300 // 5 minutes for large video uploads
+export const dynamic = 'force-dynamic'
+
 const LYZR_UPLOAD_URL = `${process.env.LYZR_AGENT_BASE_URL || 'https://agent-prod.studio.lyzr.ai'}/v3/assets/upload`
 const LYZR_API_KEY = process.env.LYZR_API_KEY || ''
 
@@ -22,7 +25,27 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const formData = await request.formData()
+    let formData: FormData
+    try {
+      formData = await request.formData()
+    } catch (parseError) {
+      console.error('Failed to parse form data:', parseError)
+      return NextResponse.json(
+        {
+          success: false,
+          asset_ids: [],
+          files: [],
+          total_files: 0,
+          successful_uploads: 0,
+          failed_uploads: 0,
+          message: 'Failed to parse uploaded file. The file may be too large.',
+          timestamp: new Date().toISOString(),
+          error: parseError instanceof Error ? parseError.message : 'Failed to parse form data',
+        },
+        { status: 413 }
+      )
+    }
+
     const files = formData.getAll('files')
 
     if (files.length === 0) {
@@ -50,13 +73,42 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const response = await fetch(LYZR_UPLOAD_URL, {
-      method: 'POST',
-      headers: {
-        'x-api-key': LYZR_API_KEY,
-      },
-      body: uploadFormData,
-    })
+    // Use AbortController for timeout (4 minutes for large videos)
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 240_000)
+
+    let response: Response
+    try {
+      response = await fetch(LYZR_UPLOAD_URL, {
+        method: 'POST',
+        headers: {
+          'x-api-key': LYZR_API_KEY,
+        },
+        body: uploadFormData,
+        signal: controller.signal,
+      })
+    } catch (fetchError: any) {
+      clearTimeout(timeoutId)
+      if (fetchError?.name === 'AbortError') {
+        console.error('Upload to Lyzr API timed out')
+        return NextResponse.json(
+          {
+            success: false,
+            asset_ids: [],
+            files: [],
+            total_files: files.length,
+            successful_uploads: 0,
+            failed_uploads: files.length,
+            message: 'Upload timed out. The file may be too large. Try a shorter or lower-resolution video.',
+            timestamp: new Date().toISOString(),
+            error: 'Upload timed out after 4 minutes',
+          },
+          { status: 504 }
+        )
+      }
+      throw fetchError
+    }
+    clearTimeout(timeoutId)
 
     if (response.ok) {
       const data = await response.json()
@@ -86,6 +138,15 @@ export async function POST(request: NextRequest) {
       const errorText = await response.text()
       console.error('Upload API error:', response.status, errorText)
 
+      let userMessage = `Upload failed with status ${response.status}`
+      if (response.status === 413) {
+        userMessage = 'File is too large. Try a shorter or lower-resolution video.'
+      } else if (response.status === 415) {
+        userMessage = 'Unsupported file format. Please use MP4, MOV, WEBM, AVI, JPG, or PNG.'
+      } else if (response.status >= 500) {
+        userMessage = 'Upload server is temporarily unavailable. Please try again in a moment.'
+      }
+
       return NextResponse.json(
         {
           success: false,
@@ -94,9 +155,9 @@ export async function POST(request: NextRequest) {
           total_files: files.length,
           successful_uploads: 0,
           failed_uploads: files.length,
-          message: `Upload failed with status ${response.status}`,
+          message: userMessage,
           timestamp: new Date().toISOString(),
-          error: errorText,
+          error: errorText || userMessage,
         },
         { status: response.status }
       )
@@ -112,7 +173,7 @@ export async function POST(request: NextRequest) {
         total_files: 0,
         successful_uploads: 0,
         failed_uploads: 0,
-        message: 'Server error during upload',
+        message: 'Server error during upload. Please try again.',
         timestamp: new Date().toISOString(),
         error: error instanceof Error ? error.message : String(error),
       },

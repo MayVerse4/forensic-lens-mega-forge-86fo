@@ -265,6 +265,21 @@ export function uploadFilesWithProgress(
       })
     })
 
+    xhr.timeout = 300000 // 5 minutes for large video uploads
+    xhr.addEventListener('timeout', () => {
+      resolve({
+        success: false,
+        asset_ids: [],
+        files: [],
+        total_files: fileArray.length,
+        successful_uploads: 0,
+        failed_uploads: fileArray.length,
+        message: 'Upload timed out. The file may be too large. Try a shorter or lower-resolution video.',
+        timestamp: new Date().toISOString(),
+        error: 'Upload timed out',
+      })
+    })
+
     xhr.open('POST', '/api/upload')
     xhr.send(formData)
   })

@@ -26,8 +26,14 @@ const nextConfig = {
     unoptimized: true,
   },
 
+  // Allow large file uploads (videos)
+  serverExternalPackages: [],
+
   // Enable experimental features for faster dev
   experimental: {
+    serverActions: {
+      bodySizeLimit: '500mb',
+    },
     // Optimize package imports for faster builds
     optimizePackageImports: [
       'lucide-react',
