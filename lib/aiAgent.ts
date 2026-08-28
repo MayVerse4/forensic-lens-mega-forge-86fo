@@ -179,11 +179,8 @@ export async function callAIAgent(
 }
 
 /**
- * Upload files via server-side API route.
- * Retries up to MAX_RETRIES times on failure for reliability.
+ * Upload files via server-side API route
  */
-const UPLOAD_MAX_RETRIES = 2
-
 export async function uploadFiles(files: File | File[]): Promise<UploadResponse> {
   const fileArray = Array.isArray(files) ? files : [files]
 
@@ -201,60 +198,31 @@ export async function uploadFiles(files: File | File[]): Promise<UploadResponse>
     }
   }
 
-  let lastError = ''
-
-  for (let attempt = 0; attempt <= UPLOAD_MAX_RETRIES; attempt++) {
-    try {
-      const formData = new FormData()
-      for (const file of fileArray) {
-        formData.append('files', file, file.name)
-      }
-
-      const response = await fetchWrapper('/api/upload', {
-        method: 'POST',
-        body: formData,
-      })
-
-      if (!response) {
-        lastError = 'No response from server'
-        if (attempt < UPLOAD_MAX_RETRIES) {
-          await new Promise(r => setTimeout(r, 1000 * (attempt + 1)))
-          continue
-        }
-        break
-      }
-
-      const data = await response.json()
-
-      if (data.success && Array.isArray(data.asset_ids) && data.asset_ids.length > 0) {
-        return data
-      }
-
-      lastError = data.error || data.message || 'Upload returned no asset IDs'
-      if (attempt < UPLOAD_MAX_RETRIES) {
-        await new Promise(r => setTimeout(r, 1000 * (attempt + 1)))
-        continue
-      }
-      return data
-    } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error)
-      if (attempt < UPLOAD_MAX_RETRIES) {
-        await new Promise(r => setTimeout(r, 1000 * (attempt + 1)))
-        continue
-      }
+  try {
+    const formData = new FormData()
+    for (const file of fileArray) {
+      formData.append('files', file, file.name)
     }
-  }
 
-  return {
-    success: false,
-    asset_ids: [],
-    files: [],
-    total_files: fileArray.length,
-    successful_uploads: 0,
-    failed_uploads: fileArray.length,
-    message: 'Upload failed after multiple attempts',
-    timestamp: new Date().toISOString(),
-    error: lastError,
+    const response = await fetchWrapper('/api/upload', {
+      method: 'POST',
+      body: formData,
+    })
+
+    const data = await response.json()
+    return data
+  } catch (error) {
+    return {
+      success: false,
+      asset_ids: [],
+      files: [],
+      total_files: fileArray.length,
+      successful_uploads: 0,
+      failed_uploads: fileArray.length,
+      message: 'Network error during upload',
+      timestamp: new Date().toISOString(),
+      error: error instanceof Error ? error.message : String(error),
+    }
   }
 }
 

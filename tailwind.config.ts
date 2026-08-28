@@ -61,57 +61,34 @@ const config = {
   				'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
   				border: 'hsl(var(--sidebar-border))',
   				ring: 'hsl(var(--sidebar-ring))'
-  			},
-  			crimson: {
-  				DEFAULT: '#FF2B2B',
-  				dark: '#B11226',
-  				light: '#FF6B6B',
-  				glow: 'rgba(255, 43, 43, 0.15)'
-  			},
-  			surface: {
-  				DEFAULT: '#0D0D0F',
-  				elevated: '#141416',
-  				glass: 'rgba(255, 255, 255, 0.04)'
   			}
   		},
   		borderRadius: {
   			lg: 'var(--radius)',
   			md: 'calc(var(--radius) - 2px)',
-  			sm: 'calc(var(--radius) - 4px)',
-  			'2xl': '1rem',
-  			'3xl': '1.5rem'
+  			sm: 'calc(var(--radius) - 4px)'
   		},
   		keyframes: {
   			'accordion-down': {
-  				from: { height: '0' },
-  				to: { height: 'var(--radix-accordion-content-height)' }
+  				from: {
+  					height: '0'
+  				},
+  				to: {
+  					height: 'var(--radix-accordion-content-height)'
+  				}
   			},
   			'accordion-up': {
-  				from: { height: 'var(--radix-accordion-content-height)' },
-  				to: { height: '0' }
-  			},
-  			'pulse-glow': {
-  				'0%, 100%': { boxShadow: '0 0 20px rgba(255, 43, 43, 0.15)' },
-  				'50%': { boxShadow: '0 0 35px rgba(255, 43, 43, 0.3)' }
-  			},
-  			'fade-in': {
-  				from: { opacity: '0', transform: 'translateY(8px)' },
-  				to: { opacity: '1', transform: 'translateY(0)' }
-  			},
-  			'float': {
-  				'0%': { transform: 'translate(0, 0) rotate(0deg)' },
-  				'25%': { transform: 'translate(30px, -40px) rotate(90deg)' },
-  				'50%': { transform: 'translate(-20px, -80px) rotate(180deg)' },
-  				'75%': { transform: 'translate(40px, -30px) rotate(270deg)' },
-  				'100%': { transform: 'translate(0, 0) rotate(360deg)' }
+  				from: {
+  					height: 'var(--radix-accordion-content-height)'
+  				},
+  				to: {
+  					height: '0'
+  				}
   			}
   		},
   		animation: {
   			'accordion-down': 'accordion-down 0.2s ease-out',
-  			'accordion-up': 'accordion-up 0.2s ease-out',
-  			'pulse-glow': 'pulse-glow 3s ease-in-out infinite',
-  			'fade-in': 'fade-in 0.4s ease-out',
-  			'float': 'float linear infinite'
+  			'accordion-up': 'accordion-up 0.2s ease-out'
   		}
   	}
   },
