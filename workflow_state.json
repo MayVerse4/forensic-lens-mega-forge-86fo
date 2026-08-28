@@ -1,0 +1,72 @@
+{
+  "agents": {
+    "spatial_analysis": {
+      "id": "69ec5a87c4b36f640acfeaf6",
+      "name": "Spatial Analysis Agent",
+      "type": "sub-agent",
+      "provider": "anthropic",
+      "model": "claude-sonnet-4-6"
+    },
+    "temporal_analysis": {
+      "id": "69ec5a87760c686665879a2f",
+      "name": "Temporal Analysis Agent",
+      "type": "sub-agent",
+      "provider": "anthropic",
+      "model": "claude-sonnet-4-6"
+    },
+    "frequency_analysis": {
+      "id": "69ec5a88760c686665879a31",
+      "name": "Frequency Analysis Agent",
+      "type": "sub-agent",
+      "provider": "anthropic",
+      "model": "claude-sonnet-4-6"
+    },
+    "metadata_intelligence": {
+      "id": "69ec5a88f00d79a836e9f8d6",
+      "name": "Metadata Intelligence Agent",
+      "type": "sub-agent",
+      "provider": "anthropic",
+      "model": "claude-sonnet-4-6"
+    },
+    "source_verification": {
+      "id": "69ec5a88c4b36f640acfeaf8",
+      "name": "Source Verification Agent",
+      "type": "sub-agent",
+      "provider": "anthropic",
+      "model": "claude-sonnet-4-6"
+    },
+    "forensic_manager": {
+      "id": "69ec5aafab1cfba2fa6404a8",
+      "name": "Forensic Analysis Manager",
+      "type": "manager",
+      "provider": "openai",
+      "model": "gpt-4.1",
+      "managed_agents": [
+        "69ec5a87c4b36f640acfeaf6",
+        "69ec5a87760c686665879a2f",
+        "69ec5a88760c686665879a31",
+        "69ec5a88f00d79a836e9f8d6",
+        "69ec5a88c4b36f640acfeaf8"
+      ]
+    },
+    "trending_investigations": {
+      "id": "69ec5aaff00d79a836e9f8e4",
+      "name": "Trending Investigations Agent",
+      "type": "independent",
+      "provider": "anthropic",
+      "model": "claude-sonnet-4-6"
+    },
+    "text_analysis": {
+      "id": "69ec6df22c9962aa0794fb36",
+      "name": "Text Analysis Agent",
+      "type": "independent",
+      "provider": "anthropic",
+      "model": "claude-sonnet-4-6"
+    }
+  },
+  "database": {
+    "db_name": "app_7520aff970cefb3372caab15",
+    "collections": ["users", "analyses", "trending"],
+    "provisioned": true
+  }
+}

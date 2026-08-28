@@ -1,0 +1,24 @@
+{
+  "agent_name": "Spatial Analysis Agent",
+  "agent_id": "69ec5a87c4b36f640acfeaf6",
+  "description": "Analyzes edge inconsistencies, distortions, texture anomalies, noise patterns, blending boundaries, and visual artifacts in media. Scores on 0-100 scale with nullable scores.",
+  "agent_type": "json",
+  "accessor": "result",
+  "auto_generated": true,
+  "response_schema": {
+    "spatial_score": "number|null",
+    "findings": "string",
+    "anomalies_detected": ["string"],
+    "regions_analyzed": ["string"],
+    "confidence": "string",
+    "reasoning": "string"
+  },
+  "example_response": {
+    "spatial_score": 72,
+    "findings": "Detected blending boundary artifacts around the face region with inconsistent noise patterns between the face and background",
+    "anomalies_detected": ["Face-background noise inconsistency", "Edge blending artifacts at jawline"],
+    "regions_analyzed": ["face", "background", "edges", "hair boundary"],
+    "confidence": "high",
+    "reasoning": "Score of 72 assigned due to clear blending artifacts at the jawline boundary and measurable noise level differences between the face region and background"
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "agent_name": "Source Verification Agent",
+  "agent_id": "69ec5a88c4b36f640acfeaf8",
+  "description": "Performs source verification, provenance analysis, and context-based authenticity assessment. Scores on 0-100 scale.",
+  "agent_type": "json",
+  "accessor": "result",
+  "auto_generated": true,
+  "response_schema": {
+    "source_score": "number|null",
+    "source_assessment": "string (verified_trusted|multiple_sources_found|single_source|no_sources_found|suspicious)",
+    "findings": "string",
+    "provenance_details": {
+      "origin_traced": "boolean",
+      "sources_found": "number",
+      "trusted_source_match": "boolean",
+      "context_consistent": "boolean"
+    },
+    "confidence": "string",
+    "reasoning": "string"
+  },
+  "example_response": {
+    "source_score": 20,
+    "source_assessment": "multiple_sources_found",
+    "findings": "Media found across multiple reputable news outlets with consistent attribution to AP photographer",
+    "provenance_details": {
+      "origin_traced": true,
+      "sources_found": 5,
+      "trusted_source_match": true,
+      "context_consistent": true
+    },
+    "confidence": "high",
+    "reasoning": "Score of 20 due to verified provenance through multiple trusted news sources with consistent photographer attribution"
+  }
+}

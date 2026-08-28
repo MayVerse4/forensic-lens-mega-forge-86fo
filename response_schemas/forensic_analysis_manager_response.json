@@ -1,0 +1,64 @@
+{
+  "agent_name": "Forensic Analysis Manager",
+  "agent_id": "69ec5aafab1cfba2fa6404a8",
+  "description": "Coordinates all forensic sub-agents, normalizes 0-100 scores, handles null scores, applies metadata override, computes weighted aggregation with full model usage tracking.",
+  "agent_type": "json",
+  "accessor": "result",
+  "auto_generated": true,
+  "response_schema": {
+    "final_score": "number",
+    "classification": "string (Likely Real|Inconclusive|Suspicious|Likely Fake)",
+    "confidence_level": "string (High|Medium|Low)",
+    "spatial_score": "number|null",
+    "temporal_score": "number|null",
+    "frequency_score": "number|null",
+    "metadata_score": "number|null",
+    "source_score": "number|null",
+    "metadata_flag": "string",
+    "override_applied": "boolean",
+    "source_assessment": "string",
+    "models_used": ["string"],
+    "models_skipped": ["string"],
+    "score_weights": {
+      "spatial": "number",
+      "temporal": "number",
+      "frequency": "number",
+      "metadata": "number",
+      "source": "number"
+    },
+    "top_contributing_signal": "string",
+    "forensic_reasoning": ["string"],
+    "media_type": "string"
+  },
+  "example_response": {
+    "final_score": 68,
+    "classification": "Suspicious",
+    "confidence_level": "Medium",
+    "spatial_score": 72,
+    "temporal_score": null,
+    "frequency_score": 65,
+    "metadata_score": 55,
+    "source_score": 60,
+    "metadata_flag": "suspicious_metadata_absent",
+    "override_applied": false,
+    "source_assessment": "no_sources_found",
+    "models_used": ["Spatial Analysis", "Frequency Analysis", "Metadata Intelligence", "Source Verification"],
+    "models_skipped": ["Temporal Analysis - no temporal data available for static image"],
+    "score_weights": {
+      "spatial": 0.29,
+      "temporal": 0,
+      "frequency": 0.24,
+      "metadata": 0.29,
+      "source": 0.18
+    },
+    "top_contributing_signal": "Spatial Analysis",
+    "forensic_reasoning": [
+      "Spatial: Blending artifacts detected at face boundaries (72/100)",
+      "Temporal: Excluded - single static image with no temporal data",
+      "Frequency: GAN-like spectral patterns in mid-frequency bands (65/100)",
+      "Metadata: Stripped metadata, suspicious absence (55/100)",
+      "Source: No matching sources found in trusted databases (60/100)"
+    ],
+    "media_type": "image"
+  }
+}
