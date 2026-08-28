@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ProtectedRoute, useAuth } from 'lyzr-architect/client';
-import { callAIAgent, uploadFiles } from '@/lib/aiAgent';
+import { callAIAgent, uploadFiles, uploadFilesWithProgress } from '@/lib/aiAgent';
 import { User, LogOut } from 'lucide-react';
 import Sidebar from './sections/Sidebar';
 import AnalysisSection from './sections/AnalysisSection';
@@ -198,6 +198,8 @@ function AppContent() {
   const [analysisLoading, setAnalysisLoading] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [uploadPhase, setUploadPhase] = useState<'idle' | 'uploading' | 'analyzing'>('idle');
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const xhrRef = useRef<XMLHttpRequest | null>(null);
 
   const [trendingItems, setTrendingItems] = useState<TrendingItem[]>([]);
 
@@ -256,19 +258,42 @@ function AppContent() {
     }
   }, []);
 
+  const handleCancelUpload = useCallback(() => {
+    if (xhrRef.current) {
+      xhrRef.current.abort();
+      xhrRef.current = null;
+    }
+    setAnalysisLoading(false);
+    setUploadPhase('idle');
+    setUploadProgress(0);
+    setActiveAgentId(null);
+    setAnalysisError(null);
+  }, []);
+
   const handleAnalyze = async (file: File) => {
     setAnalysisLoading(true);
     setAnalysisError(null);
     setAnalysisResult(null);
     setActiveAgentId(MANAGER_AGENT_ID);
     setUploadPhase('uploading');
+    setUploadProgress(0);
 
     try {
-      const uploadResult = await uploadFiles(file);
+      const uploadResult = await uploadFilesWithProgress(
+        file,
+        (percent) => setUploadProgress(percent),
+        xhrRef
+      );
+      xhrRef.current = null;
+
       if (!uploadResult.success || !Array.isArray(uploadResult.asset_ids) || uploadResult.asset_ids.length === 0) {
+        if (uploadResult.error === 'Upload was cancelled by user') {
+          return;
+        }
         setAnalysisError('Failed to upload file after multiple attempts. Please check your connection and try again.');
         setAnalysisLoading(false);
         setUploadPhase('idle');
+        setUploadProgress(0);
         setActiveAgentId(null);
         return;
       }
@@ -357,6 +382,7 @@ function AppContent() {
 
     setAnalysisLoading(false);
     setUploadPhase('idle');
+    setUploadProgress(0);
     setActiveAgentId(null);
   };
 
@@ -374,6 +400,8 @@ function AppContent() {
             loading={analysisLoading}
             error={analysisError}
             uploadPhase={uploadPhase}
+            uploadProgress={uploadProgress}
+            onCancelUpload={handleCancelUpload}
             trendingItems={trendingItems}
           />
         )}

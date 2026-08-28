@@ -179,6 +179,98 @@ export async function callAIAgent(
 }
 
 /**
+ * Upload files with XHR progress tracking and abort support.
+ */
+export function uploadFilesWithProgress(
+  files: File | File[],
+  onProgress?: (percent: number) => void,
+  abortSignal?: { current: XMLHttpRequest | null }
+): Promise<UploadResponse> {
+  const fileArray = Array.isArray(files) ? files : [files]
+
+  if (fileArray.length === 0) {
+    return Promise.resolve({
+      success: false,
+      asset_ids: [],
+      files: [],
+      total_files: 0,
+      successful_uploads: 0,
+      failed_uploads: 0,
+      message: 'No files provided',
+      timestamp: new Date().toISOString(),
+      error: 'No files provided',
+    })
+  }
+
+  return new Promise((resolve) => {
+    const formData = new FormData()
+    for (const file of fileArray) {
+      formData.append('files', file, file.name)
+    }
+
+    const xhr = new XMLHttpRequest()
+    if (abortSignal) abortSignal.current = xhr
+
+    xhr.upload.addEventListener('progress', (e) => {
+      if (e.lengthComputable && onProgress) {
+        const percent = Math.round((e.loaded / e.total) * 100)
+        onProgress(percent)
+      }
+    })
+
+    xhr.addEventListener('load', () => {
+      try {
+        const data = JSON.parse(xhr.responseText)
+        resolve(data)
+      } catch {
+        resolve({
+          success: false,
+          asset_ids: [],
+          files: [],
+          total_files: fileArray.length,
+          successful_uploads: 0,
+          failed_uploads: fileArray.length,
+          message: 'Failed to parse upload response',
+          timestamp: new Date().toISOString(),
+          error: 'Invalid server response',
+        })
+      }
+    })
+
+    xhr.addEventListener('error', () => {
+      resolve({
+        success: false,
+        asset_ids: [],
+        files: [],
+        total_files: fileArray.length,
+        successful_uploads: 0,
+        failed_uploads: fileArray.length,
+        message: 'Upload failed',
+        timestamp: new Date().toISOString(),
+        error: 'Network error during upload',
+      })
+    })
+
+    xhr.addEventListener('abort', () => {
+      resolve({
+        success: false,
+        asset_ids: [],
+        files: [],
+        total_files: fileArray.length,
+        successful_uploads: 0,
+        failed_uploads: fileArray.length,
+        message: 'Upload cancelled',
+        timestamp: new Date().toISOString(),
+        error: 'Upload was cancelled by user',
+      })
+    })
+
+    xhr.open('POST', '/api/upload')
+    xhr.send(formData)
+  })
+}
+
+/**
  * Upload files via server-side API route.
  * Retries up to MAX_RETRIES times on failure for reliability.
  */

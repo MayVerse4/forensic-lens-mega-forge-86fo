@@ -18,6 +18,9 @@ import {
   Circle,
   RefreshCw,
   Globe,
+  FileVideo,
+  FileImage,
+  Ban,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -75,6 +78,8 @@ interface AnalysisSectionProps {
   loading: boolean;
   error: string | null;
   uploadPhase?: 'idle' | 'uploading' | 'analyzing';
+  uploadProgress?: number;
+  onCancelUpload?: () => void;
   trendingItems: TrendingItem[];
 }
 
@@ -144,7 +149,14 @@ function scoreBarGlow(label: string): string {
   }
 }
 
-export default function AnalysisSection({ onAnalyze, analysisResult, loading, error, uploadPhase = 'idle', trendingItems }: AnalysisSectionProps) {
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+export default function AnalysisSection({ onAnalyze, analysisResult, loading, error, uploadPhase = 'idle', uploadProgress = 0, onCancelUpload, trendingItems }: AnalysisSectionProps) {
   const [file, setFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -247,39 +259,89 @@ export default function AnalysisSection({ onAnalyze, analysisResult, loading, er
         <Card className="border border-white/[0.08] bg-white/[0.03] backdrop-blur-xl rounded-2xl mb-6 overflow-hidden">
           <CardContent className="p-6">
             <div
-              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragOver={(e) => { if (!loading) { e.preventDefault(); setDragOver(true); } }}
               onDragLeave={() => setDragOver(false)}
-              onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-              className={`relative border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-all duration-300 ${dragOver ? 'border-[#FF2B2B] bg-[#FF2B2B]/10 shadow-[0_0_40px_rgba(255,43,43,0.15)]' : 'border-white/[0.12] hover:border-white/[0.25] hover:bg-white/[0.02]'}`}
+              onDrop={(e) => { if (!loading) handleDrop(e); }}
+              onClick={() => { if (!loading) fileInputRef.current?.click(); }}
+              className={`relative border-2 border-dashed rounded-2xl p-10 text-center transition-all duration-300 ${
+                loading
+                  ? 'border-white/[0.06] bg-white/[0.01] cursor-not-allowed opacity-60'
+                  : dragOver
+                    ? 'border-[#FF2B2B] bg-[#FF2B2B]/10 shadow-[0_0_40px_rgba(255,43,43,0.15)] cursor-pointer'
+                    : 'border-white/[0.12] hover:border-white/[0.25] hover:bg-white/[0.02] cursor-pointer'
+              }`}
             >
-              <input ref={fileInputRef} type="file" accept="image/*,video/*" onChange={handleFileSelect} className="hidden" />
+              <input ref={fileInputRef} type="file" accept="image/*,video/*" onChange={handleFileSelect} className="hidden" disabled={loading} />
               <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-white/[0.05] border border-white/[0.08] flex items-center justify-center">
-                <Upload className="w-7 h-7 text-[#9A9AA0]" />
+                {file?.type.startsWith('video') ? (
+                  <FileVideo className="w-7 h-7 text-[#FF2B2B]" />
+                ) : file ? (
+                  <FileImage className="w-7 h-7 text-[#FF2B2B]" />
+                ) : (
+                  <Upload className="w-7 h-7 text-[#9A9AA0]" />
+                )}
               </div>
               {file ? (
-                <div className="flex items-center justify-center gap-3">
-                  <span className="text-sm font-sans text-[#F5F5F5] font-medium">{file.name}</span>
-                  <button onClick={(e) => { e.stopPropagation(); setFile(null); }} className="text-[#9A9AA0] hover:text-[#FF2B2B] transition-colors p-1 rounded-lg hover:bg-white/[0.05]">
-                    <X className="w-4 h-4" />
-                  </button>
+                <div className="flex flex-col items-center gap-1.5">
+                  <div className="flex items-center justify-center gap-3">
+                    <span className="text-sm font-sans text-[#F5F5F5] font-medium truncate max-w-[300px]">{file.name}</span>
+                    {!loading && (
+                      <button onClick={(e) => { e.stopPropagation(); setFile(null); }} className="text-[#9A9AA0] hover:text-[#FF2B2B] transition-colors p-1 rounded-lg hover:bg-white/[0.05]">
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-[#9A9AA0] font-sans">
+                    <span>{formatFileSize(file.size)}</span>
+                    <span className="w-1 h-1 rounded-full bg-[#9A9AA0]/40" />
+                    <span className="uppercase">{file.type.startsWith('video') ? 'Video' : 'Image'}</span>
+                  </div>
                 </div>
               ) : (
                 <>
                   <p className="text-sm font-sans text-[#F5F5F5]/80">Drop image or video file here</p>
-                  <p className="text-xs text-[#9A9AA0] mt-1.5 font-sans">or click to browse</p>
+                  <p className="text-xs text-[#9A9AA0] mt-1.5 font-sans">Supports JPG, PNG, GIF, MP4, MOV, WEBM, AVI</p>
                 </>
               )}
             </div>
-            <Button
-              onClick={handleAnalyze}
-              disabled={!file || loading}
-              className="w-full mt-5 bg-gradient-to-r from-[#FF2B2B] to-[#B11226] hover:shadow-[0_0_40px_rgba(255,43,43,0.3)] text-white font-sans font-bold rounded-xl border-0 transition-all duration-300 h-12 text-base disabled:opacity-40 disabled:shadow-none"
-            >
-              {loading ? (
-                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {uploadPhase === 'uploading' ? 'Uploading file...' : 'Analyzing...'}</>
-              ) : 'Analyze Media'}
-            </Button>
+
+            {/* Upload progress bar */}
+            {loading && uploadPhase === 'uploading' && (
+              <div className="mt-4 space-y-2">
+                <div className="flex items-center justify-between text-xs font-sans">
+                  <span className="text-[#9A9AA0]">Uploading...</span>
+                  <span className="text-[#F5F5F5] font-mono">{uploadProgress}%</span>
+                </div>
+                <div className="w-full h-2 bg-white/[0.06] rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-[#FF2B2B] to-[#B11226] rounded-full shadow-[0_0_10px_rgba(255,43,43,0.4)] transition-all duration-300 ease-out"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Buttons row */}
+            <div className="flex gap-3 mt-5">
+              <Button
+                onClick={handleAnalyze}
+                disabled={!file || loading}
+                className="flex-1 bg-gradient-to-r from-[#FF2B2B] to-[#B11226] hover:shadow-[0_0_40px_rgba(255,43,43,0.3)] text-white font-sans font-bold rounded-xl border-0 transition-all duration-300 h-12 text-base disabled:opacity-40 disabled:shadow-none"
+              >
+                {loading ? (
+                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {uploadPhase === 'uploading' ? 'Uploading...' : 'Analyzing...'}</>
+                ) : 'Analyze Media'}
+              </Button>
+              {loading && uploadPhase === 'uploading' && onCancelUpload && (
+                <Button
+                  onClick={onCancelUpload}
+                  variant="outline"
+                  className="h-12 px-5 border-white/[0.12] bg-white/[0.04] hover:bg-white/[0.08] text-[#9A9AA0] hover:text-[#FF2B2B] hover:border-[#FF2B2B]/30 font-sans rounded-xl transition-all duration-300"
+                >
+                  <Ban className="w-4 h-4 mr-2" /> Cancel
+                </Button>
+              )}
+            </div>
           </CardContent>
         </Card>
 
@@ -304,11 +366,11 @@ export default function AnalysisSection({ onAnalyze, analysisResult, loading, er
               </div>
               {uploadPhase === 'uploading' ? (
                 <>
-                  <p className="text-sm font-sans text-[#F5F5F5]/80 mb-2">Uploading file...</p>
+                  <p className="text-sm font-sans text-[#F5F5F5]/80 mb-2">Uploading file... {uploadProgress}%</p>
                   <p className="text-xs text-[#9A9AA0] font-sans">Securely transferring your media to the analysis server</p>
                   <div className="mt-5">
                     <div className="w-full h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
-                      <div className="h-full bg-gradient-to-r from-[#FF2B2B] to-[#B11226] rounded-full animate-pulse shadow-[0_0_10px_rgba(255,43,43,0.4)]" style={{ width: '60%' }} />
+                      <div className="h-full bg-gradient-to-r from-[#FF2B2B] to-[#B11226] rounded-full shadow-[0_0_10px_rgba(255,43,43,0.4)] transition-all duration-300 ease-out" style={{ width: `${uploadProgress}%` }} />
                     </div>
                   </div>
                 </>
