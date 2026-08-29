@@ -82,21 +82,34 @@ function generateThumbnail(file: File, maxSize = 150): Promise<string> {
       const video = document.createElement('video');
       video.preload = 'metadata';
       video.muted = true;
-      video.onloadeddata = () => {
-        video.currentTime = 0.5;
-      };
-      video.onseeked = () => {
+      let captured = false;
+      const captureThumbnail = () => {
+        if (captured) return;
+        captured = true;
         clearTimeout(timeout);
-        const canvas = document.createElement('canvas');
-        const scale = Math.min(maxSize / video.videoWidth, maxSize / video.videoHeight, 1);
-        canvas.width = video.videoWidth * scale;
-        canvas.height = video.videoHeight * scale;
-        const ctx = canvas.getContext('2d');
-        ctx?.drawImage(video, 0, 0, canvas.width, canvas.height);
-        URL.revokeObjectURL(video.src);
-        resolve(canvas.toDataURL('image/jpeg', 0.6));
+        try {
+          const canvas = document.createElement('canvas');
+          const scale = Math.min(maxSize / (video.videoWidth || 320), maxSize / (video.videoHeight || 240), 1);
+          canvas.width = (video.videoWidth || 320) * scale;
+          canvas.height = (video.videoHeight || 240) * scale;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(video, 0, 0, canvas.width, canvas.height);
+          URL.revokeObjectURL(video.src);
+          resolve(canvas.toDataURL('image/jpeg', 0.6));
+        } catch {
+          URL.revokeObjectURL(video.src);
+          resolve('');
+        }
       };
-      video.onerror = () => { clearTimeout(timeout); resolve(''); };
+      video.onloadeddata = () => {
+        video.currentTime = Math.min(0.5, video.duration || 0.5);
+      };
+      video.onseeked = captureThumbnail;
+      // Fallback: if onseeked doesn't fire within 5s of loading, capture current frame
+      video.oncanplay = () => {
+        setTimeout(() => { if (!captured) captureThumbnail(); }, 5000);
+      };
+      video.onerror = () => { clearTimeout(timeout); URL.revokeObjectURL(video.src); resolve(''); };
       video.src = URL.createObjectURL(file);
     } else {
       const img = new Image();
@@ -216,6 +229,7 @@ function AppContent() {
   const [uploadPhase, setUploadPhase] = useState<'idle' | 'uploading' | 'analyzing'>('idle');
   const [uploadProgress, setUploadProgress] = useState(0);
   const xhrRef = useRef<XMLHttpRequest | null>(null);
+  const analysisAbortRef = useRef<AbortController | null>(null);
 
   const [trendingItems, setTrendingItems] = useState<TrendingItem[]>([]);
 
@@ -279,6 +293,10 @@ function AppContent() {
       xhrRef.current.abort();
       xhrRef.current = null;
     }
+    if (analysisAbortRef.current) {
+      analysisAbortRef.current.abort();
+      analysisAbortRef.current = null;
+    }
     setAnalysisLoading(false);
     setUploadPhase('idle');
     setUploadProgress(0);
@@ -323,106 +341,166 @@ function AppContent() {
       const mediaType = file.type.startsWith('video') ? 'video' : 'image';
       const message = `Analyze this ${mediaType} file named "${file.name}" for deepfake detection. Perform full forensic analysis across all five dimensions.`;
 
-      const result = await callAIAgent(message, MANAGER_AGENT_ID, { assets: uploadResult.asset_ids });
+      // Create abort controller for analysis polling
+      const abortController = new AbortController();
+      analysisAbortRef.current = abortController;
 
-      if (result?.success) {
-        const data = result?.response?.result ?? result?.response ?? {};
-        const parsed: AnalysisResult = {
-          final_score: data?.final_score ?? 0,
-          classification: data?.classification ?? 'Inconclusive',
-          confidence_level: data?.confidence_level ?? 'Low',
-          spatial_score: data?.spatial_score ?? 0,
-          temporal_score: data?.temporal_score ?? 0,
-          frequency_score: data?.frequency_score ?? 0,
-          metadata_score: data?.metadata_score ?? 0,
-          source_score: data?.source_score ?? 0,
-          metadata_flag: data?.metadata_flag ?? 'missing',
-          override_applied: data?.override_applied ?? false,
-          source_assessment: data?.source_assessment ?? 'unknown',
-          top_contributing_signal: data?.top_contributing_signal ?? 'Unknown',
-          forensic_reasoning: Array.isArray(data?.forensic_reasoning) ? data.forensic_reasoning : [],
-          media_type: data?.media_type ?? mediaType,
+      const result = await callAIAgent(message, MANAGER_AGENT_ID, { assets: uploadResult.asset_ids, abortSignal: abortController.signal });
+      analysisAbortRef.current = null;
+
+      // If cancelled during polling, exit silently
+      if (abortController.signal.aborted) return;
+
+      // Extract analysis data from potentially deeply nested response structures
+      const extractAnalysisData = (res: any): Record<string, any> | null => {
+        if (!res) return null;
+        // Direct path: result.response.result
+        const primary = res?.response?.result;
+        if (primary && typeof primary === 'object' && primary.final_score !== undefined) return primary;
+        // Fallback: result.response (when result is the data itself)
+        const secondary = res?.response;
+        if (secondary && typeof secondary === 'object' && secondary.final_score !== undefined) return secondary;
+        // Deep search: check nested response/result/data keys
+        const searchNested = (obj: any, depth = 0): Record<string, any> | null => {
+          if (!obj || typeof obj !== 'object' || depth > 4) return null;
+          if (obj.final_score !== undefined && obj.classification) return obj;
+          for (const key of ['result', 'response', 'data', 'output']) {
+            if (obj[key] && typeof obj[key] === 'object') {
+              const found = searchNested(obj[key], depth + 1);
+              if (found) return found;
+            }
+            // Handle stringified JSON in nested fields
+            if (obj[key] && typeof obj[key] === 'string') {
+              try {
+                const parsed = JSON.parse(obj[key]);
+                if (parsed && typeof parsed === 'object') {
+                  const found = searchNested(parsed, depth + 1);
+                  if (found) return found;
+                }
+              } catch { /* not JSON */ }
+            }
+          }
+          return null;
         };
+        return searchNested(res);
+      };
+
+      const buildAnalysisResult = (data: Record<string, any>): AnalysisResult => ({
+        final_score: typeof data.final_score === 'number' ? data.final_score : parseFloat(data.final_score) || 0,
+        classification: data.classification || 'Inconclusive',
+        confidence_level: data.confidence_level || 'Low',
+        spatial_score: typeof data.spatial_score === 'number' ? data.spatial_score : parseFloat(data.spatial_score) || 0,
+        temporal_score: typeof data.temporal_score === 'number' ? data.temporal_score : parseFloat(data.temporal_score) || 0,
+        frequency_score: typeof data.frequency_score === 'number' ? data.frequency_score : parseFloat(data.frequency_score) || 0,
+        metadata_score: typeof data.metadata_score === 'number' ? data.metadata_score : parseFloat(data.metadata_score) || 0,
+        source_score: typeof data.source_score === 'number' ? data.source_score : parseFloat(data.source_score) || 0,
+        metadata_flag: data.metadata_flag ?? 'missing',
+        override_applied: data.override_applied ?? false,
+        source_assessment: data.source_assessment ?? 'unknown',
+        top_contributing_signal: data.top_contributing_signal ?? 'Unknown',
+        forensic_reasoning: Array.isArray(data.forensic_reasoning)
+          ? data.forensic_reasoning
+          : typeof data.forensic_reasoning === 'string'
+            ? data.forensic_reasoning.split('\n').filter(Boolean)
+            : [],
+        media_type: data.media_type ?? mediaType,
+      });
+
+      // Try to extract analysis data from any response structure
+      const analysisData = extractAnalysisData(result);
+
+      if (analysisData) {
+        const parsed = buildAnalysisResult(analysisData);
         setAnalysisResult(parsed);
 
-        // Post-analysis operations (save to history, thumbnails, etc.)
-        // These are isolated so failures don't affect showing the analysis result
-        try {
-          const mediaHash = await generateMediaHash(file);
-          const reasoning = Array.isArray(parsed.forensic_reasoning) ? parsed.forensic_reasoning.join(' ') : '';
+        // CRITICAL: Show results immediately by clearing loading state BEFORE post-analysis ops
+        setAnalysisLoading(false);
+        setUploadPhase('idle');
+        setUploadProgress(0);
+        setActiveAgentId(null);
 
-          let mediaPreviewUrl = '';
+        // Post-analysis operations run in background — don't block result display
+        (async () => {
           try {
-            mediaPreviewUrl = await generateThumbnail(file, 200);
-          } catch { /* silent */ }
+            const mediaHash = await generateMediaHash(file);
+            const reasoning = Array.isArray(parsed.forensic_reasoning) ? parsed.forensic_reasoning.join(' ') : '';
 
-          const savePayload = {
-            user_id: 'current',
-            media_hash: mediaHash,
-            media_type: parsed.media_type,
-            filename: file.name,
-            final_score: parsed.final_score,
-            classification: parsed.classification,
-            spatial_score: parsed.spatial_score,
-            temporal_score: parsed.temporal_score,
-            frequency_score: parsed.frequency_score,
-            metadata_score: parsed.metadata_score,
-            source_score: parsed.source_score,
-            metadata_flag: parsed.metadata_flag,
-            override_applied: parsed.override_applied,
-            source_assessment: parsed.source_assessment,
-            top_contributing_signal: parsed.top_contributing_signal,
-            forensic_reasoning: reasoning,
-            confidence_level: parsed.confidence_level,
-            media_preview: mediaPreviewUrl || undefined,
-          };
-          const saveRes = await fetch('/api/analyses', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(savePayload),
-          });
-          const saveData = await saveRes.json().catch(() => ({}));
-          if (!saveRes.ok) {
-            console.error('Failed to save analysis:', saveData);
+            let mediaPreviewUrl = '';
+            try {
+              mediaPreviewUrl = await generateThumbnail(file, 200);
+            } catch { /* silent */ }
+
+            const savePayload = {
+              user_id: 'current',
+              media_hash: mediaHash,
+              media_type: parsed.media_type,
+              filename: file.name,
+              final_score: parsed.final_score,
+              classification: parsed.classification,
+              spatial_score: parsed.spatial_score,
+              temporal_score: parsed.temporal_score,
+              frequency_score: parsed.frequency_score,
+              metadata_score: parsed.metadata_score,
+              source_score: parsed.source_score,
+              metadata_flag: parsed.metadata_flag,
+              override_applied: parsed.override_applied,
+              source_assessment: parsed.source_assessment,
+              top_contributing_signal: parsed.top_contributing_signal,
+              forensic_reasoning: reasoning,
+              confidence_level: parsed.confidence_level,
+              media_preview: mediaPreviewUrl || undefined,
+            };
+            const saveRes = await fetch('/api/analyses', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(savePayload),
+            });
+            const saveData = await saveRes.json().catch(() => ({}));
+            if (!saveRes.ok) {
+              console.error('Failed to save analysis:', saveData);
+            }
+          } catch (postErr) {
+            console.error('Post-analysis save error (result still shown):', postErr);
           }
-        } catch (postErr) {
-          console.error('Post-analysis save error (result still shown):', postErr);
+          try { await fetchTrending(); } catch { /* silent */ }
+          try { await fetchHistory(); } catch { /* silent */ }
+        })();
+        return; // Early return — loading state already cleared above
+      } else if (result?.success) {
+        // Agent returned success but no structured analysis data found
+        const rawText = result?.response?.result?.text || result?.response?.message || '';
+        console.warn('Agent returned success but no structured analysis data. Raw:', JSON.stringify(result?.response).slice(0, 500));
+        if (rawText) {
+          // Try to parse analysis data from a text response
+          try {
+            const jsonMatch = rawText.match(/\{[\s\S]*"final_score"[\s\S]*\}/);
+            if (jsonMatch) {
+              const extracted = JSON.parse(jsonMatch[0]);
+              if (extracted.final_score !== undefined) {
+                const parsed = buildAnalysisResult(extracted);
+                setAnalysisResult(parsed);
+                setAnalysisLoading(false);
+                setUploadPhase('idle');
+                setUploadProgress(0);
+                setActiveAgentId(null);
+                return;
+              }
+            }
+          } catch { /* JSON extraction failed */ }
         }
-
-        try {
-          await fetchTrending();
-        } catch { /* silent */ }
-
-        try {
-          await fetchHistory();
-        } catch { /* silent */ }
+        setAnalysisError('Analysis completed but the response format was unexpected. Please try again.');
       } else {
-        // Check if response has partial data we can still display
-        const data = result?.response?.result ?? result?.response ?? {};
-        if (data?.final_score !== undefined && data?.classification) {
-          const parsed: AnalysisResult = {
-            final_score: data?.final_score ?? 0,
-            classification: data?.classification ?? 'Inconclusive',
-            confidence_level: data?.confidence_level ?? 'Low',
-            spatial_score: data?.spatial_score ?? 0,
-            temporal_score: data?.temporal_score ?? 0,
-            frequency_score: data?.frequency_score ?? 0,
-            metadata_score: data?.metadata_score ?? 0,
-            source_score: data?.source_score ?? 0,
-            metadata_flag: data?.metadata_flag ?? 'missing',
-            override_applied: data?.override_applied ?? false,
-            source_assessment: data?.source_assessment ?? 'unknown',
-            top_contributing_signal: data?.top_contributing_signal ?? 'Unknown',
-            forensic_reasoning: Array.isArray(data?.forensic_reasoning) ? data.forensic_reasoning : [],
-            media_type: data?.media_type ?? mediaType,
-          };
-          setAnalysisResult(parsed);
-        } else {
-          const errMsg = result?.error || result?.response?.message || 'Analysis failed. Please try again.';
-          setAnalysisError(typeof errMsg === 'string' ? errMsg : 'Analysis failed. Please try again.');
-        }
+        // Surface the most specific error available from the agent
+        const errMsg = result?.error
+          || result?.response?.message
+          || result?.response?.result?.message
+          || result?.response?.result?.error
+          || result?.details
+          || 'Analysis failed. Please try again.';
+        setAnalysisError(typeof errMsg === 'string' ? errMsg : 'Analysis failed. Please try again.');
       }
     } catch (err: any) {
+      console.error('Analysis error:', err);
       setAnalysisError(err?.message ?? 'An unexpected error occurred.');
     }
 

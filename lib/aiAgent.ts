@@ -75,7 +75,7 @@ export interface UploadResponse {
   error?: string
 }
 
-const POLL_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
+const POLL_TIMEOUT_MS = 8 * 60 * 1000 // 8 minutes (videos need longer with 5 sub-agents)
 
 /**
  * Call the AI Agent via server-side API route.
@@ -84,7 +84,7 @@ const POLL_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
 export async function callAIAgent(
   message: string,
   agent_id: string,
-  options?: { user_id?: string; session_id?: string; assets?: string[] }
+  options?: { user_id?: string; session_id?: string; assets?: string[]; abortSignal?: AbortSignal }
 ): Promise<AIAgentResponse> {
   try {
     // 1. Submit task — returns { task_id, agent_id, user_id, session_id }
@@ -128,6 +128,15 @@ export async function callAIAgent(
     let attempt = 0
 
     while (Date.now() - startTime < POLL_TIMEOUT_MS) {
+      // Check if cancelled before polling
+      if (options?.abortSignal?.aborted) {
+        return {
+          success: false,
+          response: { status: 'error', result: {}, message: 'Analysis cancelled by user' },
+          error: 'Analysis cancelled by user',
+        }
+      }
+
       const delay = Math.min(300 * Math.pow(1.5, attempt), 3000)
       await new Promise(r => setTimeout(r, delay))
       attempt++
@@ -161,9 +170,9 @@ export async function callAIAgent(
       response: {
         status: 'error',
         result: {},
-        message: 'Agent task timed out after 5 minutes',
+        message: 'Agent task timed out after 8 minutes',
       },
-      error: 'Agent task timed out after 5 minutes',
+      error: 'Agent task timed out after 8 minutes',
     }
   } catch (error) {
     return {

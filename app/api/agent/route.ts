@@ -284,9 +284,13 @@ async function pollTask(task_id: string) {
 
   try {
     const envelope = JSON.parse(rawText)
-    if (envelope && typeof envelope === 'object' && 'response' in envelope) {
-      moduleOutputs = envelope.module_outputs
-      agentResponseRaw = envelope.response
+    if (envelope && typeof envelope === 'object') {
+      if ('module_outputs' in envelope) {
+        moduleOutputs = envelope.module_outputs
+      }
+      if ('response' in envelope) {
+        agentResponseRaw = envelope.response
+      }
     }
   } catch {
     // Not standard JSON envelope — parseLLMJson will handle it
@@ -294,12 +298,28 @@ async function pollTask(task_id: string) {
 
   const parsed = parseLLMJson(agentResponseRaw)
 
-  const toNormalize =
-    parsed && typeof parsed === 'object' && parsed.success === false && parsed.data === null
-      ? agentResponseRaw
-      : parsed
+  // Check if parseLLMJson returned its own failure sentinel
+  const isParseFailure = parsed && typeof parsed === 'object'
+    && parsed.success === false && parsed.data === null
+  const toNormalize = isParseFailure ? agentResponseRaw : parsed
 
   const normalized = normalizeResponse(toNormalize)
+
+  // If normalized result is just text but the raw response has structured data, try to extract it
+  if (normalized.result && Object.keys(normalized.result).length === 1 && normalized.result.text) {
+    const textContent = normalized.result.text
+    if (typeof textContent === 'string') {
+      try {
+        const jsonMatch = textContent.match(/\{[\s\S]*"final_score"[\s\S]*\}/)
+        if (jsonMatch) {
+          const extracted = JSON.parse(jsonMatch[0])
+          if (extracted && typeof extracted === 'object' && extracted.final_score !== undefined) {
+            normalized.result = extracted
+          }
+        }
+      } catch { /* keep text result */ }
+    }
+  }
 
   return NextResponse.json({
     success: true,
