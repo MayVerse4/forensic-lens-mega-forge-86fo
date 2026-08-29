@@ -57,13 +57,27 @@ class ErrorBoundary extends React.Component<
 }
 
 async function generateMediaHash(file: File): Promise<string> {
-  const buffer = await file.arrayBuffer();
-  const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+  // For large files (>10MB), hash only first 1MB + file metadata to avoid OOM
+  const CHUNK_SIZE = 1024 * 1024; // 1MB
+  const meta = new TextEncoder().encode(`${file.name}|${file.size}|${file.type}`);
+  let data: ArrayBuffer;
+  if (file.size > 10 * 1024 * 1024) {
+    const chunk = await file.slice(0, CHUNK_SIZE).arrayBuffer();
+    const combined = new Uint8Array(chunk.byteLength + meta.byteLength);
+    combined.set(new Uint8Array(chunk), 0);
+    combined.set(meta, chunk.byteLength);
+    data = combined.buffer;
+  } else {
+    data = await file.arrayBuffer();
+  }
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
   return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 function generateThumbnail(file: File, maxSize = 150): Promise<string> {
   return new Promise((resolve) => {
+    // Timeout for thumbnail generation (10s for video, 5s for image)
+    const timeout = setTimeout(() => resolve(''), file.type.startsWith('video') ? 10000 : 5000);
     if (file.type.startsWith('video')) {
       const video = document.createElement('video');
       video.preload = 'metadata';
@@ -72,6 +86,7 @@ function generateThumbnail(file: File, maxSize = 150): Promise<string> {
         video.currentTime = 0.5;
       };
       video.onseeked = () => {
+        clearTimeout(timeout);
         const canvas = document.createElement('canvas');
         const scale = Math.min(maxSize / video.videoWidth, maxSize / video.videoHeight, 1);
         canvas.width = video.videoWidth * scale;
@@ -81,11 +96,12 @@ function generateThumbnail(file: File, maxSize = 150): Promise<string> {
         URL.revokeObjectURL(video.src);
         resolve(canvas.toDataURL('image/jpeg', 0.6));
       };
-      video.onerror = () => resolve('');
+      video.onerror = () => { clearTimeout(timeout); resolve(''); };
       video.src = URL.createObjectURL(file);
     } else {
       const img = new Image();
       img.onload = () => {
+        clearTimeout(timeout);
         const canvas = document.createElement('canvas');
         const scale = Math.min(maxSize / img.width, maxSize / img.height, 1);
         canvas.width = img.width * scale;
@@ -95,7 +111,7 @@ function generateThumbnail(file: File, maxSize = 150): Promise<string> {
         URL.revokeObjectURL(img.src);
         resolve(canvas.toDataURL('image/jpeg', 0.6));
       };
-      img.onerror = () => resolve('');
+      img.onerror = () => { clearTimeout(timeout); resolve(''); };
       img.src = URL.createObjectURL(file);
     }
   });
@@ -329,16 +345,17 @@ function AppContent() {
         };
         setAnalysisResult(parsed);
 
-        const mediaHash = await generateMediaHash(file);
-        const reasoning = Array.isArray(parsed.forensic_reasoning) ? parsed.forensic_reasoning.join(' ') : '';
-
-        // Generate compressed thumbnail for history
-        let mediaPreviewUrl = '';
+        // Post-analysis operations (save to history, thumbnails, etc.)
+        // These are isolated so failures don't affect showing the analysis result
         try {
-          mediaPreviewUrl = await generateThumbnail(file, 200);
-        } catch { /* silent */ }
+          const mediaHash = await generateMediaHash(file);
+          const reasoning = Array.isArray(parsed.forensic_reasoning) ? parsed.forensic_reasoning.join(' ') : '';
 
-        try {
+          let mediaPreviewUrl = '';
+          try {
+            mediaPreviewUrl = await generateThumbnail(file, 200);
+          } catch { /* silent */ }
+
           const savePayload = {
             user_id: 'current',
             media_hash: mediaHash,
@@ -368,17 +385,42 @@ function AppContent() {
           if (!saveRes.ok) {
             console.error('Failed to save analysis:', saveData);
           }
-        } catch (saveErr) {
-          console.error('Error saving analysis to history:', saveErr);
+        } catch (postErr) {
+          console.error('Post-analysis save error (result still shown):', postErr);
         }
 
         try {
           await fetchTrending();
         } catch { /* silent */ }
 
-        await fetchHistory();
+        try {
+          await fetchHistory();
+        } catch { /* silent */ }
       } else {
-        setAnalysisError(result?.error ?? 'Analysis failed. Please try again.');
+        // Check if response has partial data we can still display
+        const data = result?.response?.result ?? result?.response ?? {};
+        if (data?.final_score !== undefined && data?.classification) {
+          const parsed: AnalysisResult = {
+            final_score: data?.final_score ?? 0,
+            classification: data?.classification ?? 'Inconclusive',
+            confidence_level: data?.confidence_level ?? 'Low',
+            spatial_score: data?.spatial_score ?? 0,
+            temporal_score: data?.temporal_score ?? 0,
+            frequency_score: data?.frequency_score ?? 0,
+            metadata_score: data?.metadata_score ?? 0,
+            source_score: data?.source_score ?? 0,
+            metadata_flag: data?.metadata_flag ?? 'missing',
+            override_applied: data?.override_applied ?? false,
+            source_assessment: data?.source_assessment ?? 'unknown',
+            top_contributing_signal: data?.top_contributing_signal ?? 'Unknown',
+            forensic_reasoning: Array.isArray(data?.forensic_reasoning) ? data.forensic_reasoning : [],
+            media_type: data?.media_type ?? mediaType,
+          };
+          setAnalysisResult(parsed);
+        } else {
+          const errMsg = result?.error || result?.response?.message || 'Analysis failed. Please try again.';
+          setAnalysisError(typeof errMsg === 'string' ? errMsg : 'Analysis failed. Please try again.');
+        }
       }
     } catch (err: any) {
       setAnalysisError(err?.message ?? 'An unexpected error occurred.');
